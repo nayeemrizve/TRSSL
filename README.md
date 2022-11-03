@@ -39,9 +39,12 @@ python3 train.py --dataset stanfordcars --lbl-percent 50 --novel-percent 50 --ar
 ## Citation
 ```
 @inproceedings{rizve2022towards,
-Title={Towards Realistic Semi-Supervised Learning},
-Author={Mamshad Nayeem Rizve and Navid Kardan and Mubarak Shah},
-booktitle={European Conference on Computer Vision},
-Year={2022}
+  title={Towards realistic semi-supervised learning},
+  author={Rizve, Mamshad Nayeem and Kardan, Navid and Shah, Mubarak},
+  booktitle={European Conference on Computer Vision},
+  pages={437--455},
+  year={2022},
+  organization={Springer}
+}
 
 ```
