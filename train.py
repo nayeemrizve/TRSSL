@@ -14,14 +14,13 @@ import torch.optim as optim
 import torch.utils.data as data
 import torch.nn.functional as F
 
-from utils.utils import Bar, Logger, AverageMeter, accuracy, WeightEMA, interleave, save_checkpoint
+from utils.utils import Bar, Logger, AverageMeter, accuracy, interleave, save_checkpoint
 from tensorboardX import SummaryWriter
 from datasets.datasets import get_dataset_class
 from utils.evaluate_utils import hungarian_evaluate
 from models.build_model import build_model
 from utils.uncr_util import uncr_generator
 from utils.sinkhorn_knopp import SinkhornKnopp
-from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 
 
 parser = argparse.ArgumentParser(description='TRSSL Training')
@@ -128,15 +127,7 @@ def main():
 
     optimizer = torch.optim.SGD(model.parameters(),lr=args.lr, momentum=args.momentum, weight_decay=args.wdecay)
 
-    scheduler = LinearWarmupCosineAnnealingLR(
-        optimizer,
-        warmup_epochs=args.warmup_epochs,
-        max_epochs=args.epochs,
-        warmup_start_lr=0.001,
-        eta_min=0.001,
-    )
-
-    ema_optimizer= WeightEMA(args, model, ema_model)
+    ema_optimizer= WeightEMA(model, ema_model, alpha=args.ema_decay)
     start_epoch = 0
 
     # Resume
@@ -209,8 +200,6 @@ def main():
         }, is_best, args.out)
         test_accs.append(test_acc)
 
-        #call scheduler
-        scheduler.step()
     logger.close()
     writer.close()
 
@@ -323,9 +312,7 @@ def train(args, labeled_trainloader, unlabeled_trainloader, model, optimizer, em
         logits = torch.cat((logits_x, logits_u), 0)
 
         #cross_entropy loss
-        preds = F.softmax(logits / mixed_temp.unsqueeze(1), dim=1)
-        preds =  torch.clamp(preds, min = 1e-8)
-        preds = torch.log(preds)
+        preds = F.log_softmax(logits / mixed_temp.unsqueeze(1), dim=1)
         loss = -torch.mean(torch.sum(mixed_target * preds, dim=1))
 
         # record loss
@@ -439,6 +426,29 @@ def test_cluster(args, test_loader, model, epoch, offset=0):
     eval_output = hungarian_evaluate(predictions, gt_targets, offset)
 
     return eval_output
+
+
+class WeightEMA(object):
+    def __init__(self, model, ema_model, alpha=0.999):
+        self.model = model
+        self.ema_model = ema_model
+        self.alpha = alpha
+        self.params = list(model.state_dict().values())
+        self.ema_params = list(ema_model.state_dict().values())
+        self.wd = 2e-5
+
+        for param, ema_param in zip(self.params, self.ema_params):
+            param.data.copy_(ema_param.data)
+
+    def step(self):
+        one_minus_alpha = 1.0 - self.alpha
+        for param, ema_param in zip(self.params, self.ema_params):
+            if ema_param.dtype==torch.float32:
+                ema_param.mul_(self.alpha)
+                ema_param.add_(param * one_minus_alpha)
+                # customized weight decay
+                param.mul_(1 - self.wd)
+
 
 
 if __name__ == '__main__':

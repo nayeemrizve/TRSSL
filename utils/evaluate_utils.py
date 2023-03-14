@@ -18,7 +18,7 @@ def hungarian_evaluate(predictions, targets, offset=0):
     predictions_sel = predictions[valid_idx]
     targets_sel = targets[valid_idx]
     num_classes = torch.unique(targets).numel()
-    num_classes_pred = torch.unique(predictions_sel).numel()
+    num_classes_pred = max(torch.unique(predictions_sel).numel(), num_classes)
 
     match = _hungarian_match(predictions_sel, targets_sel, preds_k=num_classes_pred, targets_k=num_classes) # match is data dependent
     reordered_preds = torch.zeros(predictions_sel.size(0), dtype=predictions_sel.dtype)

@@ -36,18 +36,21 @@ class SinkhornKnopp(torch.nn.Module):
         
         c = torch.ones(Q.shape[1]).cuda(non_blocking=True) / Q.shape[1] # Samples
 
-        # obtain permutation/order from the marginals
-        marginals_argsort = torch.argsort(Q.sum(1))
-        marginals_argsort = marginals_argsort.detach()
-        r = []
-        for i in range(Q.shape[0]): # Classes
-            r.append((1/self.imb_factor)**(i / (Q.shape[0] - 1.0)))
-        r = np.array(r)
-        r = r * (Q.shape[1]/Q.shape[0]) # Per-class distribution in the mini-batch
-        r = torch.from_numpy(r).cuda(non_blocking=True)
-        r[marginals_argsort] = torch.sort(r)[0] # Sort/permute based on the data order  
-        r = torch.clamp(r, min=1) # Clamp the min to have a balance distribution for the tail classes
-        r /= r.sum() # Scaling to make it prob
+        if self.imb_factor > 1:
+            # obtain permutation/order from the marginals
+            marginals_argsort = torch.argsort(Q.sum(1))
+            marginals_argsort = marginals_argsort.detach()
+            r = []
+            for i in range(Q.shape[0]): # Classes
+                r.append((1/self.imb_factor)**(i / (Q.shape[0] - 1.0)))
+            r = np.array(r)
+            r = r * (Q.shape[1]/Q.shape[0]) # Per-class distribution in the mini-batch
+            r = torch.from_numpy(r).cuda(non_blocking=True)
+            r[marginals_argsort] = torch.sort(r)[0] # Sort/permute based on the data order  
+            r = torch.clamp(r, min=1) # Clamp the min to have a balance distribution for the tail classes
+            r /= r.sum() # Scaling to make it prob
+        else:
+            r = torch.ones(Q.shape[0]).cuda(non_blocking=True) / Q.shape[0]
 
         for it in range(self.num_iters):
             u = torch.sum(Q, dim=1)
@@ -60,7 +63,6 @@ class SinkhornKnopp(torch.nn.Module):
     @torch.no_grad()
     def forward(self, logits):
         # get assignments
-        # import pdb; pdb.set_trace()
         q = logits / self.epsilon
         M = torch.max(q)
         q -= M
